@@ -17,56 +17,64 @@ def create_output_directory(base_dir="ScannedDocuments"):
     return output_dir
 
 
-def save_scanned_document(processed_image, ocr_text, output_dir):
+def generate_pdf_scanned_document(processed_images, output_dir, pdf_filename=None):
     """
-    Saves the processed image and OCR text into the output directory.
-    Returns the filenames for the saved image and text file.
+    Generates a PDF where each page shows the scanned document image.
+    This PDF is created directly from in-memory images without saving them individually.
     """
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    image_filename = os.path.join(output_dir, f"processed_{timestamp}.png")
-    text_filename = os.path.join(output_dir, f"extracted_{timestamp}.txt")
+    from PIL import Image
+    from reportlab.lib.utils import ImageReader
 
-    cv2.imwrite(image_filename, processed_image)
-    with open(text_filename, "w", encoding="utf-8") as f:
-        f.write(ocr_text)
-
-    return image_filename, text_filename
-
-
-def generate_pdf_with_image_and_invisible_text(image_files, ocr_texts, output_dir, pdf_filename=None):
-    """
-    Generates a PDF where each page shows the scanned image (filling the page) and
-    overlays an invisible text layer with the OCR output. This makes the text selectable.
-    """
     if pdf_filename is None:
-        pdf_filename = os.path.join(output_dir, "scanned_documents_with_text.pdf")
+        pdf_filename = os.path.join(output_dir, "scanned_documents.pdf")
 
     c = canvas.Canvas(pdf_filename, pagesize=A4)
     page_width, page_height = A4
 
-    for image_file, text in zip(image_files, ocr_texts):
-        # Draw the image so it fills the page.
-        c.drawImage(image_file, 0, 0, width=page_width, height=page_height)
+    for img in processed_images:
+        # Convert the cv2 image to a PIL image in RGB format.
+        if len(img.shape) == 2:  # grayscale image
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        else:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
+        img_reader = ImageReader(pil_img)
 
-        # Create a text object for the OCR text.
+        # Draw the image to fill the entire page.
+        c.drawImage(img_reader, 0, 0, width=page_width, height=page_height)
+        c.showPage()
+    c.save()
+    return pdf_filename
+
+
+def generate_pdf_text_only(ocr_texts, output_dir, pdf_filename=None):
+    """
+    Generates a PDF that contains the extracted OCR text for each image on a separate page.
+    Each page of the PDF includes a header indicating the document number followed by the text.
+    """
+    if pdf_filename is None:
+        pdf_filename = os.path.join(output_dir, "extracted_texts.pdf")
+
+    c = canvas.Canvas(pdf_filename, pagesize=A4)
+    page_width, page_height = A4
+    margin = 50
+
+    for i, text in enumerate(ocr_texts, start=1):
+        c.setFont("Helvetica", 10)
         text_obj = c.beginText()
-        # Set the starting position (from the bottom left; adjust margins as needed)
-        text_obj.setTextOrigin(50, page_height - 50)
-        text_obj.setFont("Helvetica", 10)
-        try:
-            # Try to set invisible text rendering mode (3 means invisible text in PDF specs)
-            text_obj.setTextRenderMode(3)
-        except AttributeError:
-            # If not available, inject the PDF operator manually.
-            text_obj._code.append("3 Tr")
+        text_obj.setTextOrigin(margin, page_height - margin)
+
+        # Add a header for each document.
+        text_obj.textLine(f"Document {i}")
+        text_obj.textLine("")  # Empty line for spacing
 
         # Add the OCR text line by line.
         for line in text.splitlines():
             text_obj.textLine(line)
-        c.drawText(text_obj)
 
-        # Finish the page.
-        c.showPage()
+        c.drawText(text_obj)
+        c.showPage()  # Complete the page.
+
     c.save()
     return pdf_filename
 

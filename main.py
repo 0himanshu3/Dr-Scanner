@@ -1,5 +1,6 @@
 import sys
 import cv2
+import os
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QFileDialog, QTextEdit,
@@ -14,7 +15,31 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DocScanner")
-
+        self.setStyleSheet("""
+                QMainWindow {
+                    background-color: #87CEEB; /* Sky Blue */
+                }
+                QLabel {
+                    color: #333333;
+                }
+                QPushButton {
+                    background-color: #ADD8E6;
+                    border: 1px solid #1E90FF;
+                    border-radius: 5px;
+                    padding: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #87CEFA;
+                }
+                QTextEdit {
+                    background-color: #F0FFFF;
+                    border: 1px solid #B0E0E6;
+                }
+                QListWidget {
+                    background-color: #F0F8FF;
+                    border: 1px solid #B0C4DE;
+                }
+            """)
         # Lists to store loaded image file paths, images, processed images, and OCR texts
         self.image_paths = []
         self.images = []
@@ -22,7 +47,7 @@ class MainWindow(QMainWindow):
         self.ocr_texts = []
 
         # UI Elements
-        self.image_label = QLabel("No Image Loaded")
+        self.image_label = QLabel("")
         self.image_label.setFixedSize(600, 400)
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
@@ -38,8 +63,11 @@ class MainWindow(QMainWindow):
         scan_button = QPushButton("Scan Documents")
         scan_button.clicked.connect(self.scan_documents)
 
-        save_button = QPushButton("Save & Generate PDF with Selectable Text")
-        save_button.clicked.connect(self.save_all_output)
+        save_text_pdf_button = QPushButton("Save PDF with Extracted Text")
+        save_text_pdf_button.clicked.connect(self.save_all_output)
+
+        save_images_pdf_button = QPushButton("Save Scanned Images PDF")
+        save_images_pdf_button.clicked.connect(self.save_images_pdf)
 
         search_button = QPushButton("Search Documents")
         search_button.clicked.connect(self.search_documents)
@@ -48,7 +76,8 @@ class MainWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(load_button)
         btn_layout.addWidget(scan_button)
-        btn_layout.addWidget(save_button)
+        btn_layout.addWidget(save_text_pdf_button)
+        btn_layout.addWidget(save_images_pdf_button)
         btn_layout.addWidget(search_button)
 
         main_layout = QHBoxLayout()
@@ -110,25 +139,51 @@ class MainWindow(QMainWindow):
 
     def save_all_output(self):
         """
-        Saves all processed images and OCR texts, then generates a PDF with:
-          - Each page showing the scanned image
-          - An invisible text layer containing the OCR text (selectable/copyable)
+        Generates a PDF that contains the extracted text of each image on separate pages.
+        Prompts the user for a custom PDF name and saves the PDF in the output directory.
         """
-        if not self.processed_images or not self.ocr_texts:
+        if not self.ocr_texts:
             self.text_edit.setText("No processed documents to save. Please scan documents first.")
             return
 
         output_dir = file_manager.create_output_directory()
-        saved_image_files = []
-        for idx, processed_img in enumerate(self.processed_images):
-            img_file, txt_file = file_manager.save_scanned_document(processed_img, self.ocr_texts[idx], output_dir)
-            saved_image_files.append(img_file)
-            self.text_edit.append(f"Saved image: {img_file}\nSaved text: {txt_file}\n")
 
-        pdf_file = file_manager.generate_pdf_with_image_and_invisible_text(saved_image_files, self.ocr_texts,
-                                                                           output_dir)
-        self.text_edit.append(f"\nGenerated PDF with selectable text: {pdf_file}")
-        QMessageBox.information(self, "Save Complete", "All documents saved and PDF generated.")
+        # Prompt the user for a custom PDF name.
+        pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name (without extension):")
+        if ok and pdf_name:
+            if not pdf_name.lower().endswith('.pdf'):
+                pdf_name += ".pdf"
+            pdf_filename = os.path.join(output_dir, pdf_name)
+        else:
+            pdf_filename = os.path.join(output_dir, "extracted_texts.pdf")
+
+        pdf_file = file_manager.generate_pdf_text_only(self.ocr_texts, output_dir, pdf_filename)
+        self.text_edit.append(f"\nGenerated PDF with extracted text: {pdf_file}")
+        QMessageBox.information(self, "Save Complete", "Extracted text PDF generated successfully.")
+
+    def save_images_pdf(self):
+        """
+        Generates a PDF containing the scanned images (one per page).
+        Prompts the user for a custom PDF name and saves the PDF in the output directory.
+        """
+        if not self.processed_images:
+            self.text_edit.setText("No processed images to save. Please scan documents first.")
+            return
+
+        output_dir = file_manager.create_output_directory()
+
+        # Prompt the user for a custom PDF name.
+        pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name for scanned images (without extension):")
+        if ok and pdf_name:
+            if not pdf_name.lower().endswith('.pdf'):
+                pdf_name += ".pdf"
+            pdf_filename = os.path.join(output_dir, pdf_name)
+        else:
+            pdf_filename = os.path.join(output_dir, "scanned_documents.pdf")
+
+        pdf_file = file_manager.generate_pdf_scanned_document(self.processed_images, output_dir, pdf_filename)
+        self.text_edit.append(f"\nGenerated PDF with scanned images: {pdf_file}")
+        QMessageBox.information(self, "Save Complete", "Scanned images PDF generated successfully.")
 
     def search_documents(self):
         """

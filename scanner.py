@@ -51,35 +51,35 @@ def four_point_transform(image, pts):
 def detect_document(image):
     """
     Detects the document (page) within the image by finding a 4-point contour that
-    likely corresponds to the page. It filters contours based on area ratio and aspect ratio,
-    so that the table is less likely to be selected.
-    Returns a warped (top-down) view of the page if found; otherwise, returns the original image.
+    likely corresponds to the document. It uses edge detection with Canny, finds contours,
+    and filters them based on area and aspect ratio to avoid extraneous elements.
+    Returns a warped (top-down) view of the document if found; otherwise, returns the original image.
     """
-    # Convert image to grayscale and blur to reduce noise
+    # Convert image to grayscale and apply Gaussian blur to reduce noise
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Perform Canny edge detection
-    edged = cv2.Canny(gray_blurred, 75, 200)
+    # Edge Detection using Canny
+    edged = cv2.Canny(blurred, 75, 200)
 
-    # Find contours and sort them by area (largest first)
+    # Find contours and sort by area (largest first)
     contours, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
     image_area = image.shape[0] * image.shape[1]
     candidate = None
 
-    # Loop over the contours to find a 4-point contour that likely represents the page.
+    # Loop through contours to find a 4-point contour that meets our criteria
     for c in contours:
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
         if len(approx) == 4:
             contour_area = cv2.contourArea(approx)
             area_ratio = contour_area / image_area
-            # Assume the page occupies between 20% and 70% of the image.
+            # Assume the document occupies between 20% and 70% of the image.
             if 0.2 < area_ratio < 0.7:
                 x, y, w, h = cv2.boundingRect(approx)
                 aspect_ratio = w / float(h)
-                # Check if the aspect ratio is reasonable for a page.
+                # Check if the aspect ratio is reasonable for a document.
                 if 0.5 < aspect_ratio < 2.0:
                     candidate = approx
                     break
@@ -92,20 +92,33 @@ def detect_document(image):
 def preprocess_image(image):
     """
     Preprocesses the image for OCR:
-      - Runs document detection to obtain a top-down view.
+      - Performs document detection and perspective correction.
       - Converts the detected document to grayscale.
       - Enhances contrast using CLAHE.
-      - Applies Otsu's thresholding and morphological opening.
+      - Applies Otsu's thresholding.
+      - Uses morphological opening and closing to refine edges and remove minor artifacts.
     Returns the cleaned binary image.
     """
+    # Detect and warp the document
     detected = detect_document(image)
+
+    # Convert to grayscale and enhance contrast
     gray = cv2.cvtColor(detected, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
+
+    # Apply Otsu's thresholding
     _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Define a small kernel for morphological operations
     kernel = np.ones((1, 1), np.uint8)
-    cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-    return cleaned
+
+    # Apply morphological opening to remove small noise
+    opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+    # Apply morphological closing to fill small holes
+    closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
+
+    return closed
 
 
 def extract_text(image):
@@ -124,8 +137,8 @@ def extract_text(image):
 
 def scan_document(image_path):
     """
-    Reads an image from the given path, applies document detection and preprocessing.
-    Returns a tuple (processed_image, original_image).
+    Reads an image from the given path, applies document detection, perspective correction,
+    and preprocessing. Returns a tuple (processed_image, original_image).
     """
     image = cv2.imread(image_path)
     if image is None:
