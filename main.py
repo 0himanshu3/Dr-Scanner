@@ -4,9 +4,10 @@ import os
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QFileDialog, QTextEdit,
-    QVBoxLayout, QWidget, QHBoxLayout, QInputDialog, QListWidget, QMessageBox
+    QVBoxLayout, QWidget, QHBoxLayout, QInputDialog, QListWidget, QListWidgetItem, QMessageBox
 )
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QFont
+from PyQt5.QtCore import Qt
 import scanner
 import file_manager
 
@@ -16,47 +17,65 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DocScanner")
         self.setStyleSheet("""
-                QMainWindow {
-                    background-color: #87CEEB; /* Sky Blue */
-                }
-                QLabel {
-                    color: #333333;
-                }
-                QPushButton {
-                    background-color: #ADD8E6;
-                    border: 1px solid #1E90FF;
-                    border-radius: 5px;
-                    padding: 5px;
-                }
-                QPushButton:hover {
-                    background-color: #87CEFA;
-                }
-                QTextEdit {
-                    background-color: #F0FFFF;
-                    border: 1px solid #B0E0E6;
-                }
-                QListWidget {
-                    background-color: #F0F8FF;
-                    border: 1px solid #B0C4DE;
-                }
-            """)
-        # Lists to store loaded image file paths, images, processed images, and OCR texts
+            QMainWindow {
+                background-color: #5D3A9B;
+            }
+            QLabel {
+                color: #F0F0F0;
+            }
+            QPushButton {
+                background-color: #8E44AD;
+                color: #ffffff;
+                border: 2px solid #732d91;
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #9B59B6;
+            }
+            QTextEdit {
+                background-color: #F3E5F5;
+                color: #333333;
+                border: 1px solid #B39DDB;
+                border-radius: 5px;
+                font-size: 13px;
+            }
+            QListWidget {
+                background-color: #EDE7F6;
+                color: #333333;
+                border: 1px solid #B39DDB;
+                border-radius: 5px;
+                font-size: 13px;
+            }
+        """)
+
+        # Data lists
         self.image_paths = []
         self.images = []
         self.processed_images = []
         self.ocr_texts = []
 
+        # Title label
+        self.title_label = QLabel("DocScanner")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setFont(QFont("Arial", 24, QFont.Bold))
+        self.title_label.setStyleSheet("color: #ffffff; margin: 10px;")
+
         # UI Elements
         self.image_label = QLabel("")
         self.image_label.setFixedSize(600, 400)
+        self.image_label.setAlignment(Qt.AlignCenter)
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
+        self.text_edit.setAlignment(Qt.AlignCenter)
 
-        # List widget to display file names of loaded images
+        # List widget for file names
         self.list_widget = QListWidget()
         self.list_widget.setFixedWidth(200)
         self.list_widget.itemClicked.connect(self.display_selected_image)
-
+        
+        # Buttons
         load_button = QPushButton("Load Images")
         load_button.clicked.connect(self.load_images)
 
@@ -72,21 +91,31 @@ class MainWindow(QMainWindow):
         search_button = QPushButton("Search Documents")
         search_button.clicked.connect(self.search_documents)
 
-        # Layout
+        # Button layout
         btn_layout = QHBoxLayout()
+        btn_layout.setAlignment(Qt.AlignCenter)
         btn_layout.addWidget(load_button)
         btn_layout.addWidget(scan_button)
         btn_layout.addWidget(save_text_pdf_button)
         btn_layout.addWidget(save_images_pdf_button)
         btn_layout.addWidget(search_button)
 
-        main_layout = QHBoxLayout()
+        # Left side layout: title, list widget, buttons, text edit
         left_layout = QVBoxLayout()
+        left_layout.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(self.title_label)
         left_layout.addWidget(self.list_widget)
         left_layout.addLayout(btn_layout)
         left_layout.addWidget(self.text_edit)
+
+        # Right side layout: image display
         right_layout = QVBoxLayout()
+        right_layout.setAlignment(Qt.AlignCenter)
         right_layout.addWidget(self.image_label)
+
+        # Main layout combining left and right sides
+        main_layout = QHBoxLayout()
+        main_layout.setAlignment(Qt.AlignCenter)
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
 
@@ -95,9 +124,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
     def load_images(self):
-        """
-        Opens a file dialog to select multiple images and displays their file names.
-        """
         options = QFileDialog.Options()
         files, _ = QFileDialog.getOpenFileNames(
             self, "Open Image Files", "", "Images (*.png *.jpg *.jpeg *.bmp)", options=options
@@ -112,14 +138,13 @@ class MainWindow(QMainWindow):
                 img = cv2.imread(file)
                 if img is not None:
                     self.images.append(img)
-                    self.list_widget.addItem(file)
+                    item = QListWidgetItem(file)
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.list_widget.addItem(item)
                 else:
                     self.text_edit.append(f"Failed to load: {file}")
 
     def scan_documents(self):
-        """
-        Processes all loaded images using document detection and OCR.
-        """
         if not self.images:
             self.text_edit.setText("Please load images first.")
             return
@@ -138,17 +163,11 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Scan Complete", "All images have been processed.")
 
     def save_all_output(self):
-        """
-        Generates a PDF that contains the extracted text of each image on separate pages.
-        Prompts the user for a custom PDF name and saves the PDF in the output directory.
-        """
         if not self.ocr_texts:
             self.text_edit.setText("No processed documents to save. Please scan documents first.")
             return
 
         output_dir = file_manager.create_output_directory()
-
-        # Prompt the user for a custom PDF name.
         pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name (without extension):")
         if ok and pdf_name:
             if not pdf_name.lower().endswith('.pdf'):
@@ -162,17 +181,11 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Save Complete", "Extracted text PDF generated successfully.")
 
     def save_images_pdf(self):
-        """
-        Generates a PDF containing the scanned images (one per page).
-        Prompts the user for a custom PDF name and saves the PDF in the output directory.
-        """
         if not self.processed_images:
             self.text_edit.setText("No processed images to save. Please scan documents first.")
             return
 
         output_dir = file_manager.create_output_directory()
-
-        # Prompt the user for a custom PDF name.
         pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name for scanned images (without extension):")
         if ok and pdf_name:
             if not pdf_name.lower().endswith('.pdf'):
@@ -186,9 +199,6 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Save Complete", "Scanned images PDF generated successfully.")
 
     def search_documents(self):
-        """
-        Prompts the user for a search query and displays the results from the stored documents.
-        """
         query, ok = QInputDialog.getText(self, "Search Documents", "Enter search query:")
         if ok and query:
             results = file_manager.search_documents(query)
@@ -201,9 +211,6 @@ class MainWindow(QMainWindow):
             self.text_edit.setText(result_text)
 
     def display_selected_image(self, item):
-        """
-        Displays the processed image corresponding to the selected file in the list widget.
-        """
         idx = self.list_widget.row(item)
         if idx < len(self.processed_images) and self.processed_images[idx] is not None:
             self.display_image(self.processed_images[idx])
@@ -211,9 +218,6 @@ class MainWindow(QMainWindow):
             self.display_image(self.images[idx])
 
     def display_image(self, cv_img):
-        """
-        Converts a cv2 image into a QImage and displays it in the QLabel.
-        """
         if cv_img is None:
             return
         if len(cv_img.shape) == 2:
@@ -225,7 +229,7 @@ class MainWindow(QMainWindow):
             bytes_per_line = 3 * width
             q_img = QImage(cv_img.data, width, height, bytes_per_line, QImage.Format_BGR888)
         pixmap = QPixmap.fromImage(q_img)
-        self.image_label.setPixmap(pixmap.scaled(self.image_label.size()))
+        self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
 
 
 if __name__ == "__main__":
