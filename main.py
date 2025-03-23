@@ -4,130 +4,141 @@ import os
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QFileDialog, QTextEdit,
-    QVBoxLayout, QWidget, QHBoxLayout, QInputDialog, QListWidget, QListWidgetItem, QMessageBox
+    QVBoxLayout, QWidget, QHBoxLayout, QListWidget, QMessageBox, QFrame, QInputDialog
 )
-from PyQt5.QtGui import QPixmap, QImage, QFont
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt
 import scanner
 import file_manager
 
+# Define a folder to store all generated PDFs and the extracted text file.
+PDF_STORAGE_FOLDER = "scanned_documents"
+TEXT_STORAGE_FILE = os.path.join(PDF_STORAGE_FOLDER, "scanned_texts.txt")
+
+# Ensure the storage folder exists.
+os.makedirs(PDF_STORAGE_FOLDER, exist_ok=True)
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("DocScanner")
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #5D3A9B;
-            }
-            QLabel {
-                color: #F0F0F0;
-            }
-            QPushButton {
-                background-color: #8E44AD;
-                color: #ffffff;
-                border: 2px solid #732d91;
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #9B59B6;
-            }
-            QTextEdit {
-                background-color: #F3E5F5;
-                color: #333333;
-                border: 1px solid #B39DDB;
-                border-radius: 5px;
-                font-size: 13px;
-            }
-            QListWidget {
-                background-color: #EDE7F6;
-                color: #333333;
-                border: 1px solid #B39DDB;
-                border-radius: 5px;
-                font-size: 13px;
-            }
-        """)
+        self.setWindowTitle("Dr. Scanner")
+        self.setGeometry(200, 100, 900, 600)
+        self.setWindowIcon(QIcon("icons/app_icon.png"))
 
-        # Data lists
         self.image_paths = []
         self.images = []
         self.processed_images = []
         self.ocr_texts = []
 
-        # Title label
-        self.title_label = QLabel("DocScanner")
-        self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setFont(QFont("Arial", 24, QFont.Bold))
-        self.title_label.setStyleSheet("color: #ffffff; margin: 10px;")
+        self.initUI()
 
-        # UI Elements
+    def initUI(self):
+        main_layout = QVBoxLayout()
+
+        # Title Section
+        title_label = QLabel("Dr. Scanner")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #007BFF; margin-bottom: 15px;")
+
+        # Main Content Layout
+        content_layout = QHBoxLayout()
+
+        # Sidebar Layout
+        sidebar = QVBoxLayout()
+        sidebar.setContentsMargins(10, 10, 10, 10)
+        sidebar.setSpacing(15)
+
+        sidebar_heading = QLabel("📂 File Management")
+        sidebar_heading.setStyleSheet("font-size: 16px; font-weight: bold; color: #343A40;")
+
+        self.list_widget = QListWidget()
+        self.list_widget.setFixedWidth(220)
+        self.list_widget.setStyleSheet("background-color: #F8F9FA; border-radius: 10px; padding: 5px;")
+
+        load_button = QPushButton("📂 Load Images")
+        scan_button = QPushButton("🔍 Scan Documents")
+        save_text_pdf_button = QPushButton("📝 Save Extracted Text PDF")
+        save_images_pdf_button = QPushButton("📜 Save Scanned Images PDF")
+        search_button = QPushButton("🔎 View Saved Documents")
+
+        # Button Styling
+        button_style = """
+            QPushButton {
+                background-color: #007BFF; color: white; border-radius: 5px; padding: 8px;
+                font-weight: bold; font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+        """
+        for btn in [load_button, scan_button, save_text_pdf_button, save_images_pdf_button, search_button]:
+            btn.setStyleSheet(button_style)
+            btn.setFixedHeight(50)
+
+        # Main Display Layout
+        display_layout = QVBoxLayout()
+
+        image_heading = QLabel("🖼 Document Preview")
+        image_heading.setStyleSheet("font-size: 16px; font-weight: bold; color: #343A40;")
+
         self.image_label = QLabel("")
         self.image_label.setFixedSize(600, 400)
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setStyleSheet("border: 2px dashed #6C757D; background-color: #E9ECEF; border-radius: 10px;")
+
+        text_heading = QLabel("📝 Extracted Text")
+        text_heading.setStyleSheet("font-size: 16px; font-weight: bold; color: #343A40;")
+
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setAlignment(Qt.AlignCenter)
+        self.text_edit.setStyleSheet("""
+            background-color: #F8F9FA;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+        """)
 
-        # List widget for file names
-        self.list_widget = QListWidget()
-        self.list_widget.setFixedWidth(200)
-        self.list_widget.itemClicked.connect(self.display_selected_image)
-        
-        # Buttons
-        load_button = QPushButton("Load Images")
-        load_button.clicked.connect(self.load_images)
+        frame = QFrame()
+        frame.setFrameShape(QFrame.StyledPanel)
+        frame.setStyleSheet("background-color: white; border-radius: 10px; padding: 10px;")
 
-        scan_button = QPushButton("Scan Documents")
-        scan_button.clicked.connect(self.scan_documents)
+        # Add sidebar widgets
+        sidebar.addWidget(sidebar_heading)
+        sidebar.addWidget(self.list_widget)
+        sidebar.addWidget(load_button)
+        sidebar.addWidget(scan_button)
+        sidebar.addWidget(save_text_pdf_button)
+        sidebar.addWidget(save_images_pdf_button)
+        sidebar.addWidget(search_button)
+        sidebar.addStretch()
 
-        save_text_pdf_button = QPushButton("Save PDF with Extracted Text")
-        save_text_pdf_button.clicked.connect(self.save_all_output)
+        # Add display widgets
+        display_layout.addWidget(image_heading)
+        display_layout.addWidget(self.image_label, alignment=Qt.AlignCenter)
+        display_layout.addWidget(text_heading)
+        display_layout.addWidget(self.text_edit)
+        frame.setLayout(display_layout)
 
-        save_images_pdf_button = QPushButton("Save Scanned Images PDF")
-        save_images_pdf_button.clicked.connect(self.save_images_pdf)
+        content_layout.addLayout(sidebar)
+        content_layout.addWidget(frame)
 
-        search_button = QPushButton("Search Documents")
-        search_button.clicked.connect(self.search_documents)
-
-        # Button layout
-        btn_layout = QHBoxLayout()
-        btn_layout.setAlignment(Qt.AlignCenter)
-        btn_layout.addWidget(load_button)
-        btn_layout.addWidget(scan_button)
-        btn_layout.addWidget(save_text_pdf_button)
-        btn_layout.addWidget(save_images_pdf_button)
-        btn_layout.addWidget(search_button)
-
-        # Left side layout: title, list widget, buttons, text edit
-        left_layout = QVBoxLayout()
-        left_layout.setAlignment(Qt.AlignCenter)
-        left_layout.addWidget(self.title_label)
-        left_layout.addWidget(self.list_widget)
-        left_layout.addLayout(btn_layout)
-        left_layout.addWidget(self.text_edit)
-
-        # Right side layout: image display
-        right_layout = QVBoxLayout()
-        right_layout.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(self.image_label)
-
-        # Main layout combining left and right sides
-        main_layout = QHBoxLayout()
-        main_layout.setAlignment(Qt.AlignCenter)
-        main_layout.addLayout(left_layout)
-        main_layout.addLayout(right_layout)
+        main_layout.addWidget(title_label)
+        main_layout.addLayout(content_layout)
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
+        # Connect Buttons
+        load_button.clicked.connect(self.load_images)
+        scan_button.clicked.connect(self.scan_documents)
+        save_text_pdf_button.clicked.connect(self.save_all_output)
+        save_images_pdf_button.clicked.connect(self.save_images_pdf)
+        search_button.clicked.connect(self.open_saved_documents_folder)
+
     def load_images(self):
         options = QFileDialog.Options()
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "Open Image Files", "", "Images (*.png *.jpg *.jpeg *.bmp)", options=options
-        )
+        files, _ = QFileDialog.getOpenFileNames(self, "Open Image Files", "", "Images (*.png *.jpg *.jpeg *.bmp)", options=options)
         if files:
             self.image_paths = files
             self.images = []
@@ -138,9 +149,7 @@ class MainWindow(QMainWindow):
                 img = cv2.imread(file)
                 if img is not None:
                     self.images.append(img)
-                    item = QListWidgetItem(file)
-                    item.setTextAlignment(Qt.AlignCenter)
-                    self.list_widget.addItem(item)
+                    self.list_widget.addItem(os.path.basename(file))
                 else:
                     self.text_edit.append(f"Failed to load: {file}")
 
@@ -158,7 +167,12 @@ class MainWindow(QMainWindow):
             text = scanner.extract_text(processed)
             self.processed_images.append(processed)
             self.ocr_texts.append(text)
-            self.text_edit.append(f"Processed {self.image_paths[idx]}\nExtracted text length: {len(text)}\n")
+            self.text_edit.append(f"✅ Processed {os.path.basename(self.image_paths[idx])}\n📝 Extracted text length: {len(text)}\n")
+
+        # Append all extracted texts into the storage file for search functionality.
+        with open(TEXT_STORAGE_FILE, "a", encoding="utf-8") as file:
+            for text in self.ocr_texts:
+                file.write(text + "\n" + "-" * 50 + "\n")
 
         QMessageBox.information(self, "Scan Complete", "All images have been processed.")
 
@@ -167,70 +181,25 @@ class MainWindow(QMainWindow):
             self.text_edit.setText("No processed documents to save. Please scan documents first.")
             return
 
-        output_dir = file_manager.create_output_directory()
-        pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name (without extension):")
-        if ok and pdf_name:
-            if not pdf_name.lower().endswith('.pdf'):
-                pdf_name += ".pdf"
-            pdf_filename = os.path.join(output_dir, pdf_name)
-        else:
-            pdf_filename = os.path.join(output_dir, "extracted_texts.pdf")
-
-        pdf_file = file_manager.generate_pdf_text_only(self.ocr_texts, output_dir, pdf_filename)
-        self.text_edit.append(f"\nGenerated PDF with extracted text: {pdf_file}")
-        QMessageBox.information(self, "Save Complete", "Extracted text PDF generated successfully.")
+        filename, _ = QInputDialog.getText(self, "Save File", "Enter filename for the extracted text PDF:")
+        if filename:
+            pdf_filename = os.path.join(PDF_STORAGE_FOLDER, f"{filename}.pdf")
+            file_manager.generate_pdf_text_only(self.ocr_texts, PDF_STORAGE_FOLDER, pdf_filename)
+            QMessageBox.information(self, "Save Complete", f"Extracted text PDF saved as {pdf_filename}")
 
     def save_images_pdf(self):
         if not self.processed_images:
             self.text_edit.setText("No processed images to save. Please scan documents first.")
             return
 
-        output_dir = file_manager.create_output_directory()
-        pdf_name, ok = QInputDialog.getText(self, "PDF File Name", "Enter PDF file name for scanned images (without extension):")
-        if ok and pdf_name:
-            if not pdf_name.lower().endswith('.pdf'):
-                pdf_name += ".pdf"
-            pdf_filename = os.path.join(output_dir, pdf_name)
-        else:
-            pdf_filename = os.path.join(output_dir, "scanned_documents.pdf")
+        filename, _ = QInputDialog.getText(self, "Save File", "Enter filename for the scanned images PDF:")
+        if filename:
+            pdf_filename = os.path.join(PDF_STORAGE_FOLDER, f"{filename}.pdf")
+            file_manager.generate_pdf_scanned_document(self.processed_images, PDF_STORAGE_FOLDER, pdf_filename)
+            QMessageBox.information(self, "Save Complete", f"Scanned images PDF saved as {pdf_filename}")
 
-        pdf_file = file_manager.generate_pdf_scanned_document(self.processed_images, output_dir, pdf_filename)
-        self.text_edit.append(f"\nGenerated PDF with scanned images: {pdf_file}")
-        QMessageBox.information(self, "Save Complete", "Scanned images PDF generated successfully.")
-
-    def search_documents(self):
-        query, ok = QInputDialog.getText(self, "Search Documents", "Enter search query:")
-        if ok and query:
-            results = file_manager.search_documents(query)
-            if results:
-                result_text = "Search Results:\n"
-                for file_path, snippet in results:
-                    result_text += f"\nFile: {file_path}\nContext: {snippet}\n"
-            else:
-                result_text = "No documents found containing the query."
-            self.text_edit.setText(result_text)
-
-    def display_selected_image(self, item):
-        idx = self.list_widget.row(item)
-        if idx < len(self.processed_images) and self.processed_images[idx] is not None:
-            self.display_image(self.processed_images[idx])
-        elif idx < len(self.images):
-            self.display_image(self.images[idx])
-
-    def display_image(self, cv_img):
-        if cv_img is None:
-            return
-        if len(cv_img.shape) == 2:
-            height, width = cv_img.shape
-            bytes_per_line = width
-            q_img = QImage(cv_img.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
-        else:
-            height, width, ch = cv_img.shape
-            bytes_per_line = 3 * width
-            q_img = QImage(cv_img.data, width, height, bytes_per_line, QImage.Format_BGR888)
-        pixmap = QPixmap.fromImage(q_img)
-        self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio))
-
+    def open_saved_documents_folder(self):
+        os.startfile(PDF_STORAGE_FOLDER)  # Opens the folder in File Explorer
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
