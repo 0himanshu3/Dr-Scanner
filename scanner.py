@@ -3,7 +3,7 @@ import numpy as np
 import pytesseract
 
 # Specify the path to your Tesseract executable
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = r"E:\Tesseract\tesseract.exe"
 
 
 def order_points(pts):
