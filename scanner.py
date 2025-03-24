@@ -1,9 +1,11 @@
 import cv2
 import numpy as np
 import pytesseract
+import easyocr
+
 
 # Specify the path to your Tesseract executable
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 
 def order_points(pts):
@@ -121,19 +123,23 @@ def preprocess_image(image):
     return closed
 
 
-def extract_text(image):
+def extract_text(image, min_confidence=0.5):
     """
-    Uses Tesseract OCR with a custom configuration to extract text.
-    Returns the extracted text stripped of extra whitespace.
+    Extracts text using EasyOCR with a confidence threshold.
+    Filters out low-confidence results.
     """
-    custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=1'
     try:
-        text = pytesseract.image_to_string(image, config=custom_config)
-        return text.strip()
+        reader = easyocr.Reader(['en'])
+        results = reader.readtext(image)
+
+        # Filter and join only high-confidence results
+        text_lines = [result[1] for result in results if result[2] >= min_confidence]
+        extracted_text = "\n".join(text_lines)
+        
+        return extracted_text.strip()
     except Exception as e:
         print("Error during OCR:", e)
         return ""
-
 
 def scan_document(image_path):
     """
