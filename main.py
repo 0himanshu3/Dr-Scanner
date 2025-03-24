@@ -6,9 +6,9 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QFileDialog, QTextEdit,
     QVBoxLayout, QWidget, QHBoxLayout, QListWidget, QMessageBox, QFrame, QInputDialog
 )
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap, QIcon, QImage
 from PyQt5.QtCore import Qt
-import scanner
+import scanner2
 import file_manager
 
 # Define a folder to store all generated PDFs and the extracted text file.
@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         self.images = []
         self.processed_images = []
         self.ocr_texts = []
+        self.current_preview_index = 0  # To keep track of which image is being shown
 
         self.initUI()
 
@@ -85,6 +86,18 @@ class MainWindow(QMainWindow):
         self.image_label.setFixedSize(600, 400)
         self.image_label.setStyleSheet("border: 2px dashed #6C757D; background-color: #E9ECEF; border-radius: 10px;")
 
+        # Navigation Buttons Layout
+        nav_layout = QHBoxLayout()
+        self.prev_button = QPushButton("← Previous")
+        self.next_button = QPushButton("Next →")
+        for nav_btn in [self.prev_button, self.next_button]:
+            nav_btn.setStyleSheet(button_style)
+            nav_btn.setFixedHeight(40)
+        self.prev_button.clicked.connect(self.show_previous_image)
+        self.next_button.clicked.connect(self.show_next_image)
+        nav_layout.addWidget(self.prev_button)
+        nav_layout.addWidget(self.next_button)
+
         text_heading = QLabel("📝 Extracted Text")
         text_heading.setStyleSheet("font-size: 16px; font-weight: bold; color: #343A40;")
 
@@ -115,6 +128,7 @@ class MainWindow(QMainWindow):
         # Add display widgets
         display_layout.addWidget(image_heading)
         display_layout.addWidget(self.image_label, alignment=Qt.AlignCenter)
+        display_layout.addLayout(nav_layout)
         display_layout.addWidget(text_heading)
         display_layout.addWidget(self.text_edit)
         frame.setLayout(display_layout)
@@ -144,6 +158,7 @@ class MainWindow(QMainWindow):
             self.images = []
             self.processed_images = []
             self.ocr_texts = []
+            self.current_preview_index = 0  # Reset preview index
             self.list_widget.clear()
             for file in files:
                 img = cv2.imread(file)
@@ -163,11 +178,16 @@ class MainWindow(QMainWindow):
         self.text_edit.clear()
 
         for idx, img in enumerate(self.images):
-            processed = scanner.preprocess_image(img)
-            text = scanner.extract_text(processed)
+            processed = scanner2.preprocess_image(img)
+            text = scanner2.extract_text(processed)
             self.processed_images.append(processed)
             self.ocr_texts.append(text)
             self.text_edit.append(f"✅ Processed {os.path.basename(self.image_paths[idx])}\n📝 Extracted text length: {len(text)}\n")
+
+        # Reset preview index and update preview to first processed image if available
+        if self.processed_images:
+            self.current_preview_index = 0
+            self.update_preview()
 
         # Append all extracted texts into the storage file for search functionality.
         with open(TEXT_STORAGE_FILE, "a", encoding="utf-8") as file:
@@ -175,6 +195,25 @@ class MainWindow(QMainWindow):
                 file.write(text + "\n" + "-" * 50 + "\n")
 
         QMessageBox.information(self, "Scan Complete", "All images have been processed.")
+
+    def update_preview(self):
+        if self.processed_images:
+            img = self.processed_images[self.current_preview_index]
+            height, width = img.shape
+            bytes_per_line = width
+            q_image = QImage(img.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(q_image).scaled(self.image_label.width(), self.image_label.height(), Qt.KeepAspectRatio)
+            self.image_label.setPixmap(pixmap)
+
+    def show_previous_image(self):
+        if self.processed_images and self.current_preview_index > 0:
+            self.current_preview_index -= 1
+            self.update_preview()
+
+    def show_next_image(self):
+        if self.processed_images and self.current_preview_index < len(self.processed_images) - 1:
+            self.current_preview_index += 1
+            self.update_preview()
 
     def save_all_output(self):
         if not self.ocr_texts:
@@ -199,7 +238,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Save Complete", f"Scanned images PDF saved as {pdf_filename}")
 
     def open_saved_documents_folder(self):
-        os.startfile(PDF_STORAGE_FOLDER)  # Opens the folder in File Explorer
+        os.startfile(PDF_STORAGE_FOLDER)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
