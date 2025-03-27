@@ -141,8 +141,3 @@ def generate_pdf_line_by_line(image_path, pdf_filename):
     c.save()
     print("PDF saved as:", pdf_filename)
     return pdf_filename
-
-if __name__ == "__main__":
-    image_path = "sample_document.jpg" 
-    pdf_file_name = "extracted_layout.pdf"
-    generate_pdf_line_by_line(image_path, pdf_file_name)

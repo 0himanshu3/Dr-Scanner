@@ -16,6 +16,22 @@ def create_output_directory(base_dir="ScannedDocuments"):
         os.makedirs(output_dir)
     return output_dir
 
+def generate_scanned_images_pdf(processed_images, pdf_filename):
+    c = canvas.Canvas(pdf_filename, pagesize=A4)
+    page_width, page_height = A4
+    for img in processed_images:
+        # Convert image to RGB if needed
+        if len(img.shape) == 2:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        else:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
+        img_reader = ImageReader(pil_img)
+        c.drawImage(img_reader, 0, 0, width=page_width, height=page_height)
+        c.showPage()
+    c.save()
+    print("Scanned images PDF saved as:", pdf_filename)
+    
 def generate_pdf_scanned_document(processed_images, output_dir, pdf_filename=None):
     # Generate a PDF with each scanned image filling a page.
     if pdf_filename is None:

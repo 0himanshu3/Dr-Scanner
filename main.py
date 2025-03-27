@@ -11,12 +11,10 @@ from PyQt5.QtCore import Qt
 import scanner2
 import pytesseract
 from pytesseract import Output
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
+import file_manager 
 
 # Folder for PDFs and text storage
 PDF_STORAGE_FOLDER = "scanned_documents"
-TEXT_STORAGE_FILE = os.path.join(PDF_STORAGE_FOLDER, "scanned_texts.txt")
 os.makedirs(PDF_STORAGE_FOLDER, exist_ok=True)
 
 class MainWindow(QMainWindow):
@@ -30,7 +28,9 @@ class MainWindow(QMainWindow):
         self.processed_images = []
         self.ocr_texts = []
         self.current_preview_index = 0
-        self.pdf_filename = ""
+        # Two PDF filenames will be generated using the same base name.
+        self.pdf_filename_images = ""
+        self.pdf_filename_text = ""
         self.initUI()
 
     def initUI(self):
@@ -144,10 +144,11 @@ class MainWindow(QMainWindow):
                     self.list_widget.addItem(os.path.basename(file))
                 else:
                     self.text_edit.append(f"Failed to load: {file}")
-            # Ask user for PDF base name
-            base_name, ok = QInputDialog.getText(self, "Save PDF", "Enter base filename for the PDF (without extension):")
+            # Ask user for a base filename and generate two PDFs (images & text)
+            base_name, ok = QInputDialog.getText(self, "Save PDF", "Enter base filename for the PDFs (without extension):")
             if ok and base_name:
-                self.pdf_filename = os.path.join(PDF_STORAGE_FOLDER, f"{base_name}.pdf")
+                self.pdf_filename_images = os.path.join(PDF_STORAGE_FOLDER, f"{base_name}_images.pdf")
+                self.pdf_filename_text = os.path.join(PDF_STORAGE_FOLDER, f"{base_name}_text.pdf")
             else:
                 QMessageBox.warning(self, "Filename Missing", "No PDF filename provided.")
 
@@ -160,59 +161,28 @@ class MainWindow(QMainWindow):
         self.ocr_texts = []
         self.text_edit.clear()
 
-        pdf_canvas = None
-        if self.pdf_filename:
-            pdf_canvas = canvas.Canvas(self.pdf_filename, pagesize=A4)
-            page_width, page_height = A4
-
         for idx, img in enumerate(self.images):
             processed = scanner2.preprocess_image(img)
             text = scanner2.extract_text(processed)
             self.processed_images.append(processed)
             self.ocr_texts.append(text)
             self.text_edit.append(f"Processed {os.path.basename(self.image_paths[idx])}\nText length: {len(text)}\n")
-            
-            if pdf_canvas:
-                ocr_data = pytesseract.image_to_data(img, output_type=Output.DICT)
-                lines = {}
-                n_boxes = len(ocr_data['text'])
-                for i in range(n_boxes):
-                    conf = int(ocr_data['conf'][i])
-                    word = ocr_data['text'][i].strip()
-                    if conf > 50 and word:
-                        key = (ocr_data['block_num'][i], ocr_data['par_num'][i], ocr_data['line_num'][i])
-                        if key not in lines:
-                            lines[key] = {"words": [], "min_left": ocr_data['left'][i], "top": ocr_data['top'][i]}
-                        else:
-                            if ocr_data['left'][i] < lines[key]["min_left"]:
-                                lines[key]["min_left"] = ocr_data['left'][i]
-                        lines[key]["words"].append(word)
-                
-                sorted_lines = sorted(lines.items(), key=lambda item: item[1]["top"])
-                img_height, img_width = img.shape[:2]
-                scale_x = page_width / float(img_width)
-                scale_y = page_height / float(img_height)
-                for key, line_data in sorted_lines:
-                    line_text = " ".join(line_data["words"])
-                    x_pdf = line_data["min_left"] * scale_x
-                    y_pdf = page_height - (line_data["top"] * scale_y)
-                    pdf_canvas.setFont("Helvetica", 10)
-                    pdf_canvas.drawString(x_pdf, y_pdf, line_text)
-                pdf_canvas.showPage()
 
-        if pdf_canvas:
-            pdf_canvas.save()
-            QMessageBox.information(self, "PDF Saved", f"PDF saved as:\n{self.pdf_filename}")
-
-        with open(TEXT_STORAGE_FILE, "a", encoding="utf-8") as file:
-            for text in self.ocr_texts:
-                file.write(text + "\n" + "-" * 50 + "\n")
+        # Generate PDF for scanned images using file_manager
+        if self.pdf_filename_images:
+            pdf_images = file_manager.generate_pdf_scanned_document(self.processed_images, PDF_STORAGE_FOLDER, pdf_filename=self.pdf_filename_images)
+            QMessageBox.information(self, "Images PDF Saved", f"Scanned images PDF saved as:\n{pdf_images}")
+        
+        # Generate PDF for extracted text using file_manager
+        if self.pdf_filename_text:
+            pdf_text = file_manager.generate_pdf_text_only(self.ocr_texts, PDF_STORAGE_FOLDER, pdf_filename=self.pdf_filename_text)
+            QMessageBox.information(self, "Text PDF Saved", f"Extracted text PDF saved as:\n{pdf_text}")
 
         if self.processed_images:
             self.current_preview_index = 0
             self.update_preview()
 
-        QMessageBox.information(self, "Scan Complete", "All images processed and PDF generated (if filename provided).")
+        QMessageBox.information(self, "Scan Complete", "All images processed and both PDFs generated (if filenames provided).")
 
     def update_preview(self):
         if self.processed_images:
