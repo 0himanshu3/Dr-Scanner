@@ -11,11 +11,11 @@ from PyQt5.QtCore import Qt
 import scanner2
 import file_manager
 
-# Define a folder to store all generated PDFs and the extracted text file.
+# Define a folder 
 PDF_STORAGE_FOLDER = "scanned_documents"
 TEXT_STORAGE_FILE = os.path.join(PDF_STORAGE_FOLDER, "scanned_texts.txt")
 
-# Ensure the storage folder exists.
+# Ensure the storage folder exists
 os.makedirs(PDF_STORAGE_FOLDER, exist_ok=True)
 
 class MainWindow(QMainWindow):
@@ -184,12 +184,12 @@ class MainWindow(QMainWindow):
             self.ocr_texts.append(text)
             self.text_edit.append(f"✅ Processed {os.path.basename(self.image_paths[idx])}\n📝 Extracted text length: {len(text)}\n")
 
-        # Reset preview index and update preview to first processed image if available
+        # Reset preview index and update preview to first processed image 
         if self.processed_images:
             self.current_preview_index = 0
             self.update_preview()
 
-        # Append all extracted texts into the storage file for search functionality.
+        # Append all extracted texts 
         with open(TEXT_STORAGE_FILE, "a", encoding="utf-8") as file:
             for text in self.ocr_texts:
                 file.write(text + "\n" + "-" * 50 + "\n")
