@@ -3,58 +3,42 @@ import datetime
 import cv2
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-
+from reportlab.lib.utils import ImageReader
+from PIL import Image
+import pytesseract
+from pytesseract import Output
 
 def create_output_directory(base_dir="ScannedDocuments"):
-    """
-    Creates an output directory based on today's date (e.g., ScannedDocuments/2025-03-17).
-    Returns the directory path.
-    """
+    # Create folder with today's date.
     today = datetime.date.today().strftime("%Y-%m-%d")
     output_dir = os.path.join(base_dir, today)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     return output_dir
 
-
 def generate_pdf_scanned_document(processed_images, output_dir, pdf_filename=None):
-    """
-    Generates a PDF where each page shows the scanned document image.
-    This PDF is created directly from in-memory images without saving them individually.
-    """
-    from PIL import Image
-    from reportlab.lib.utils import ImageReader
-
+    # Generate a PDF with each scanned image filling a page.
     if pdf_filename is None:
         pdf_filename = os.path.join(output_dir, "scanned_documents.pdf")
-
     c = canvas.Canvas(pdf_filename, pagesize=A4)
     page_width, page_height = A4
 
     for img in processed_images:
-        # Convert the cv2 image to a PIL image in RGB format.
-        if len(img.shape) == 2:  # grayscale image
+        if len(img.shape) == 2:  # grayscale
             img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         else:
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img_rgb)
         img_reader = ImageReader(pil_img)
-
-        # Draw the image to fill the entire page.
         c.drawImage(img_reader, 0, 0, width=page_width, height=page_height)
         c.showPage()
     c.save()
     return pdf_filename
 
-
 def generate_pdf_text_only(ocr_texts, output_dir, pdf_filename=None):
-    """
-    Generates a PDF that contains the extracted OCR text for each image on a separate page.
-    Each page of the PDF includes a header indicating the document number followed by the text.
-    """
+    # Create a PDF with OCR text, one document per page.
     if pdf_filename is None:
         pdf_filename = os.path.join(output_dir, "extracted_texts.pdf")
-
     c = canvas.Canvas(pdf_filename, pagesize=A4)
     page_width, page_height = A4
     margin = 50
@@ -63,27 +47,18 @@ def generate_pdf_text_only(ocr_texts, output_dir, pdf_filename=None):
         c.setFont("Helvetica", 10)
         text_obj = c.beginText()
         text_obj.setTextOrigin(margin, page_height - margin)
-
-        # Add a header for each document.
         text_obj.textLine(f"Document {i}")
-        text_obj.textLine("")  # Empty line for spacing
-
-        # Add the OCR text line by line.
+        text_obj.textLine("")
         for line in text.splitlines():
             text_obj.textLine(line)
-
         c.drawText(text_obj)
-        c.showPage()  # Complete the page.
+        c.showPage()
 
     c.save()
     return pdf_filename
 
-
 def search_documents(query, base_dir="ScannedDocuments"):
-    """
-    Searches for the query string in all extracted text files under the base directory.
-    Returns a list of tuples (file_path, snippet) for files where the query was found.
-    """
+    # Look for the query in all .txt files.
     results = []
     for root, dirs, files in os.walk(base_dir):
         for file in files:
@@ -101,3 +76,33 @@ def search_documents(query, base_dir="ScannedDocuments"):
                 except Exception as e:
                     print(f"Error reading {file_path}: {e}")
     return results
+
+def generate_pdf_with_layout(cv_image, output_pdf="layout_ocr.pdf"):
+    # Create a PDF with text drawn at OCR-determined positions.
+    if len(cv_image.shape) == 2:
+        pil_img = Image.fromarray(cv_image)
+    else:
+        pil_img = Image.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
+    img_width, img_height = pil_img.size
+    data = pytesseract.image_to_data(pil_img, output_type=Output.DICT)
+    c = canvas.Canvas(output_pdf, pagesize=A4)
+    page_width, page_height = A4
+
+    c.drawImage(ImageReader(pil_img), 0, 0, width=page_width, height=page_height)
+    scale_x = page_width / float(img_width)
+    scale_y = page_height / float(img_height)
+
+    n_boxes = len(data['text'])
+    for i in range(n_boxes):
+        conf = int(data['conf'][i])
+        text = data['text'][i].strip()
+        if conf > 50 and text:
+            x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+            pdf_x = x * scale_x
+            pdf_y = page_height - (y * scale_y)
+            font_size = max(6, int(h * scale_y * 0.8))
+            c.setFont("Helvetica", font_size)
+            c.drawString(pdf_x, pdf_y, text)
+    c.showPage()
+    c.save()
+    return output_pdf
