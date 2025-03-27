@@ -3,10 +3,8 @@ import numpy as np
 import pytesseract
 import easyocr
 
-import easyocr
-from pytesseract import Output  # Kept for structural similarity (not used in generate_pdf_line_by_line)
 
-# Specify the path to your Tesseract executable
+# Specifying the path to your Tesseract 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
@@ -97,15 +95,15 @@ def preprocess_image(image):
     return closed
 
 
-def extract_text(image):
-    """
-    Uses Tesseract OCR with a custom configuration to extract text.
-    Returns the extracted text stripped of extra whitespace.
-    """
-    custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=1'
+def extract_text(image, min_confidence=0.5):
     try:
-        text = pytesseract.image_to_string(image, config=custom_config)
-        return text.strip()
+        reader = easyocr.Reader(['en'])
+        results = reader.readtext(image)
+
+        text_lines = [result[1] for result in results if result[2] >= min_confidence]
+        extracted_text = "\n".join(text_lines)
+        
+        return extracted_text.strip()
     except Exception as e:
         print("Error during OCR:", e)
         return ""
