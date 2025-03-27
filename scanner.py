@@ -1,9 +1,11 @@
 import cv2
 import numpy as np
 import pytesseract
+import easyocr
+from pytesseract import Output  # Kept for structural similarity (not used in generate_pdf_line_by_line)
 
 # Specify the path to your Tesseract executable
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = r"E:\Tesseract\tesseract.exe"
 
 
 def order_points(pts):
@@ -121,15 +123,18 @@ def preprocess_image(image):
     return closed
 
 
-def extract_text(image):
+def extract_text(image, min_confidence=0.5):
     """
-    Uses Tesseract OCR with a custom configuration to extract text.
-    Returns the extracted text stripped of extra whitespace.
+    Extracts text using EasyOCR with a confidence threshold.
+    Filters out low-confidence results.
     """
-    custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=1'
     try:
-        text = pytesseract.image_to_string(image, config=custom_config)
-        return text.strip()
+        reader = easyocr.Reader(['en'])
+        results = reader.readtext(image)
+        # Filter and join only high-confidence results
+        text_lines = [result[1] for result in results if result[2] >= min_confidence]
+        extracted_text = "\n".join(text_lines)
+        return extracted_text.strip()
     except Exception as e:
         print("Error during OCR:", e)
         return ""
@@ -146,3 +151,87 @@ def scan_document(image_path):
         return None, None
     processed = preprocess_image(image)
     return processed, image
+
+
+def generate_pdf_line_by_line(image_path, pdf_filename, min_confidence=0.5):
+    """
+    Reads an image from the given path, performs OCR using EasyOCR to extract text line by line,
+    and writes the recognized text into a PDF as the text is extracted.
+    The text is written at positions relative to its original location in the image,
+    with words grouped into lines based on a vertical threshold for better layout preservation.
+    """
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+
+    # Read the original image
+    image = cv2.imread(image_path)
+    if image is None:
+        print("Could not load the image. Check the path!")
+        return None
+
+    reader = easyocr.Reader(['en'])
+    results = reader.readtext(image)
+
+    # Group words into lines based on vertical proximity.
+    # We'll use a threshold (in pixels) to decide if words belong on the same line.
+    line_threshold = 10
+    lines = {}
+    for bbox, text, conf in results:
+        if conf >= min_confidence and text.strip():
+            xs = [point[0] for point in bbox]
+            ys = [point[1] for point in bbox]
+            left = min(xs)
+            top = min(ys)
+            # Group by the integer division of the top coordinate by the threshold.
+            key = int(top // line_threshold)
+            if key not in lines:
+                lines[key] = []
+            lines[key].append({
+                'text': text.strip(),
+                'left': left,
+                'top': top
+            })
+
+    # Create a sorted list of lines.
+    sorted_lines = []
+    for key in sorted(lines.keys()):
+        words = lines[key]
+        # Sort words in the line by their left coordinate.
+        words.sort(key=lambda w: w['left'])
+        line_text = " ".join(word['text'] for word in words)
+        line_left = min(word['left'] for word in words)
+        # Use the average top coordinate for better positioning.
+        line_top = sum(word['top'] for word in words) / len(words)
+        sorted_lines.append({'text': line_text, 'left': line_left, 'top': line_top})
+
+    # Sort the lines by their top coordinate.
+    sorted_lines.sort(key=lambda x: x['top'])
+
+    # Create a PDF canvas using A4 page size.
+    c = canvas.Canvas(pdf_filename, pagesize=A4)
+    page_width, page_height = A4
+
+    # Get image dimensions for scaling.
+    img_height, img_width = image.shape[:2]
+    scale_x = page_width / float(img_width)
+    scale_y = page_height / float(img_height)
+
+    # Write each line into the PDF using the scaled positions.
+    for line in sorted_lines:
+        line_text = line["text"]
+        x_pdf = line["left"] * scale_x
+        y_pdf = page_height - (line["top"] * scale_y * 0.9)  # Adjust factor if needed.
+        c.setFont("Helvetica", 10)
+        c.drawString(x_pdf, y_pdf, line_text)
+
+    c.showPage()
+    c.save()
+    print("PDF saved as:", pdf_filename)
+    return pdf_filename
+
+
+# Example usage:
+if __name__ == "__main__":
+    image_path = "sample_document.jpg"  # Replace with your image path
+    pdf_file_name = "extracted_layout.pdf"  # Replace with your desired PDF filename
+    generate_pdf_line_by_line(image_path, pdf_file_name)
