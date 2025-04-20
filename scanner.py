@@ -1,11 +1,6 @@
 import cv2
 import numpy as np
-import pytesseract
 import easyocr
-
-
-# Specifying the path to your Tesseract 
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
 def order_points(pts):
