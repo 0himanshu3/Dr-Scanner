@@ -2,8 +2,10 @@ import cv2
 import numpy as np
 import pytesseract
 from pytesseract import Output
+import os
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+os.environ["TESSDATA_PREFIX"] = r"C:\Program Files\Tesseract-OCR\tessdata"
 
 def order_points(pts):
     # Order points: top-left, top-right, bottom-right, bottom-left.
@@ -104,7 +106,8 @@ def generate_pdf_line_by_line(image_path, pdf_filename):
         print("Could not load the image. Check the path!")
         return None
 
-    ocr_data = pytesseract.image_to_data(image, output_type=Output.DICT)
+    processed_image = preprocess_image(image)
+    ocr_data = pytesseract.image_to_data(processed_image, output_type=Output.DICT)
     lines = {}
     n_boxes = len(ocr_data['text'])
     for i in range(n_boxes):
